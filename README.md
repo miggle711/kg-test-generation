@@ -5,7 +5,7 @@ a **baseline** (no structural context) against a **KG-augmented** approach that 
 the Knowledge Graph produced by [`repo-kg-construction`](https://github.com/miggle711/repo-kg-construction)
 as extra context.
 
-Owners: Mun, Joe (baseline + eval pipeline).
+Owners: Mun, Joe and Sheryl (baseline + eval pipeline).
 
 ## Why
 
