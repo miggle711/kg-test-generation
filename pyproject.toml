@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kg-test-generation"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "kg-construction @ git+https://github.com/miggle711/repo-kg-construction.git@main",
+]
+
+[project.optional-dependencies]
+groq = ["groq"]
+all = ["kg-test-generation[groq]"]
+
+[project.scripts]
+kg-testgen = "kg_test_generation.pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
