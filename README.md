@@ -78,4 +78,9 @@ decided by whoever writes code first.
 
 ## Status
 
-Early scaffold. No implementation yet.
+Package scaffold in place: `pyproject.toml` with `kg-construction` wired in as a real git
+dependency, `src/kg_test_generation/` with one stub module per pipeline stage
+(`context.py`, `generate.py`, `parse_output.py`, `execute.py`, `metrics.py`,
+`pipeline.py`), CI, and a smoke test confirming the scaffold installs and the
+`kg_construction` dependency resolves. Every stub raises `NotImplementedError` pointing at
+the open design question blocking it (see #1) -- no real pipeline logic yet.
