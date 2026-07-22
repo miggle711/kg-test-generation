@@ -98,6 +98,60 @@ class TestBuildPrompt:
 
         assert "Do not invent a placeholder module" not in prompt
 
+    def test_method_seed_produces_class_instantiation_instruction(self):
+        """A method (class_name present) must not get the plain "from
+        module import function_name" instruction -- that import doesn't
+        exist for a method (see issue #14, where the model fabricated
+        exactly that: "from requests.sessions import resolve_redirects").
+        Instead it must be told to import and instantiate the class.
+        """
+        context = {
+            "seed": {
+                "function_name": "resolve_redirects",
+                "module": "requests.sessions",
+                "class_name": "Session",
+            },
+            "context": {},
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "Class: Session" in prompt
+        assert "method of `Session`" in prompt
+        assert "from requests.sessions import Session" in prompt
+        assert "Session().resolve_redirects(...)" in prompt
+        # Must not suggest importing the method itself as a module-level name.
+        assert "from requests.sessions import resolve_redirects" not in prompt
+
+    def test_function_seed_without_class_name_keeps_plain_import_instruction(self):
+        """A module-level function (no class_name) must still get the
+        original "from module import function_name" instruction -- the
+        method-specific branch must not affect the function case.
+        """
+        context = {
+            "seed": {"function_name": "get", "module": "requests.api", "class_name": ""},
+            "context": {},
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "from requests.api import get" in prompt
+        assert "Class:" not in prompt
+
+    def test_caller_qualified_name_includes_class_for_a_method(self):
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "callers": [
+                    {"name": "request", "module": "requests.sessions", "class_name": "Session"}
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "requests.sessions.Session.request" in prompt
+
     def test_context_nodes_without_module_fall_back_to_bare_name(self):
         """A caller/callee/related entry with no module info (e.g. an
         external stdlib symbol the KG didn't resolve a filepath for) must
