@@ -1,15 +1,28 @@
-"""Tests for execute.py: running a generated test file via subprocess and
-parsing pytest's --junit-xml report into structured per-test results.
+"""Tests for execute.py: running a generated test file via subprocess or
+Docker, and parsing pytest's --junit-xml report into structured per-test
+results.
 
-Uses real pytest subprocess runs against synthetic files (no mocking of
-the subprocess itself, since correctly invoking and parsing real pytest
-output is exactly what's under test) -- matches repo-kg-construction's
-own testing style of exercising real behavior over mocked internals.
+Uses real pytest subprocess/container runs against synthetic files (no
+mocking of the subprocess/docker calls themselves, since correctly
+invoking and parsing real pytest output is exactly what's under test) --
+matches repo-kg-construction's own testing style of exercising real
+behavior over mocked internals. The container tests are skipped if
+Docker isn't available/running, since they need a real daemon.
 """
 
+import shutil
+import subprocess
 import time
 
+import pytest
+
 from kg_test_generation.execute import run_test_file
+
+DOCKER_AVAILABLE = shutil.which("docker") is not None and subprocess.run(
+    ["docker", "info"], capture_output=True, timeout=10
+).returncode == 0
+
+requires_docker = pytest.mark.skipif(not DOCKER_AVAILABLE, reason="Docker not available")
 
 
 class TestRunTestFile:
@@ -111,3 +124,85 @@ class TestRunTestFile:
         tc = result.test_cases[0]
         assert tc.passed is False
         assert tc.message is not None
+
+
+@requires_docker
+class TestRunTestFileInContainer:
+    """Real Docker runs against python:3.8-slim -- covers issue #13: a
+    target commit whose pinned deps only import under an old Python
+    (reproduced here directly with urllib3==1.22's collections.Mapping
+    usage, without needing a real requests checkout) must collect
+    successfully inside the container even though it fails on the host's
+    modern Python.
+    """
+
+    IMAGE = "python:3.8-slim"
+
+    def test_known_mix_of_pass_fail_error_skip(self, tmp_path):
+        (tmp_path / "test_mix.py").write_text(
+            "import pytest\n\n"
+            "def test_passes():\n"
+            "    assert 1 + 1 == 2\n\n"
+            "def test_fails():\n"
+            "    assert 1 + 1 == 3\n\n"
+            "def test_errors():\n"
+            '    raise RuntimeError("boom")\n\n'
+            '@pytest.mark.skip(reason="skip")\n'
+            "def test_skipped():\n"
+            "    assert False\n"
+        )
+
+        result = run_test_file(
+            tmp_path / "test_mix.py", tmp_path, container_image=self.IMAGE, timeout=120
+        )
+
+        assert result.collected is True
+        names = {tc.name: tc.passed for tc in result.test_cases}
+        assert names == {
+            "test_passes": True,
+            "test_fails": False,
+            "test_errors": False,
+        }
+        assert "test_skipped" not in names
+        assert result.any_passed is True
+        assert result.all_passed is False
+
+    def test_installs_target_repo_own_dependency(self, tmp_path):
+        """A repo_checkout with a setup.py declaring its own pinned
+        dependency (here, an old urllib3 whose collections.Mapping usage
+        only works on Python < 3.10) must have that dependency installed
+        and importable inside the container -- this is the actual bug
+        behind issue #13, reproduced directly rather than via a live
+        requests checkout.
+        """
+        (tmp_path / "setup.py").write_text(
+            "from setuptools import setup\n"
+            "setup(name='fakepkg', version='0.1', py_modules=['fakepkg'],\n"
+            "      install_requires=['urllib3==1.22'])\n"
+        )
+        (tmp_path / "fakepkg.py").write_text("VALUE = 42\n")
+        (tmp_path / "test_old_dep.py").write_text(
+            "def test_old_urllib3_imports_on_py38():\n"
+            "    import urllib3\n"
+            "    assert urllib3.__version__ == '1.22'\n"
+        )
+
+        result = run_test_file(
+            tmp_path / "test_old_dep.py", tmp_path, container_image=self.IMAGE, timeout=120
+        )
+
+        assert result.collected is True
+        assert result.any_passed is True
+
+    def test_collection_failure_from_bad_import(self, tmp_path):
+        (tmp_path / "test_broken.py").write_text(
+            "from a_module_that_does_not_exist import Something\n\n"
+            "def test_something():\n    assert True\n"
+        )
+        result = run_test_file(
+            tmp_path / "test_broken.py", tmp_path, container_image=self.IMAGE, timeout=60
+        )
+
+        assert result.collected is False
+        assert result.test_cases == []
+        assert result.any_passed is False

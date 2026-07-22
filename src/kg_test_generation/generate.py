@@ -71,6 +71,16 @@ def _build_baseline_prompt(context: Dict) -> str:
     return "\n".join(parts)
 
 
+def _qualified_name(node: Dict) -> str:
+    """Render a context node (caller/callee/related) as "module.name" when
+    a module is known, else bare "name" -- gives the model a real import
+    path for context nodes instead of just a bare, ambiguous name.
+    """
+    name = node.get("name", "")
+    module = node.get("module", "")
+    return f"{module}.{name}" if module else name
+
+
 def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
     """Build a prompt from context.build_kg_augmented_context()'s
     hierarchical {seed, context, instructions} payload.
@@ -82,6 +92,7 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
     parts = [
         "# SEED FUNCTION (Modified Function to Test)",
         f"Function: {seed.get('function_name', '')}",
+        f"Module: {seed.get('module', '')}",
         "",
         "Signature:",
         "```python",
@@ -89,6 +100,14 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
         "```",
         "",
     ]
+
+    if seed.get("module"):
+        parts.extend([
+            f"IMPORTANT: Import the function/class under test from `{seed['module']}` "
+            f"(e.g. `from {seed['module']} import {seed.get('function_name', '')}`). "
+            "Do not invent a placeholder module name.",
+            "",
+        ])
 
     if seed.get("docstring"):
         parts.extend(['Docstring:', f'"""{seed["docstring"]}"""', ""])
@@ -105,19 +124,19 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
     if context.get("callers"):
         parts.append("## Callers (Functions that call this function):")
         for caller in context["callers"]:
-            parts.append(f"- {caller.get('name', '')}")
+            parts.append(f"- {_qualified_name(caller)}")
         parts.append("")
 
     if context.get("callees"):
         parts.append("## Callees (Functions called by this function):")
         for callee in context["callees"]:
-            parts.append(f"- {callee.get('name', '')}")
+            parts.append(f"- {_qualified_name(callee)}")
         parts.append("")
 
     if context.get("related"):
         parts.append("## Related Classes:")
         for rel in context["related"]:
-            parts.append(f"- {rel.get('type', '')}: {rel.get('name', '')}")
+            parts.append(f"- {rel.get('type', '')}: {_qualified_name(rel)}")
         parts.append("")
 
     if context.get("existing_tests"):

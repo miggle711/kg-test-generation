@@ -39,15 +39,18 @@ class TestBuildPrompt:
         context = {
             "seed": {
                 "function_name": "send",
+                "module": "requests.sessions",
                 "signature": "def send(self, request, **kwargs)",
                 "docstring": "Send a request.",
                 "source_code": "def send(...): ...",
                 "exceptions": ["ValueError"],
             },
             "context": {
-                "callers": [{"name": "request"}],
-                "callees": [{"name": "rebuild_proxies"}],
-                "related": [{"type": "parent_class", "name": "SessionRedirectMixin"}],
+                "callers": [{"name": "request", "module": "requests.sessions"}],
+                "callees": [{"name": "rebuild_proxies", "module": "requests.sessions"}],
+                "related": [
+                    {"type": "parent_class", "name": "SessionRedirectMixin", "module": "requests.sessions"}
+                ],
                 "existing_tests": [{"name": "test_send_basic"}],
                 "patterns": {"control_flow": ["Branches: 3"], "error_handling": ["ValueError"]},
             },
@@ -63,11 +66,55 @@ class TestBuildPrompt:
         assert "Send a request." in prompt
         assert "ValueError" in prompt
         assert "EXECUTION CONTEXT" in prompt
-        assert "request" in prompt  # caller
-        assert "rebuild_proxies" in prompt  # callee
-        assert "SessionRedirectMixin" in prompt  # related
+        assert "requests.sessions.request" in prompt  # caller, qualified
+        assert "requests.sessions.rebuild_proxies" in prompt  # callee, qualified
+        assert "requests.sessions.SessionRedirectMixin" in prompt  # related, qualified
         assert "test_send_basic" in prompt  # existing test
         assert "happy path" in prompt  # coverage target
+
+    def test_seed_module_produces_explicit_import_instruction(self):
+        """The model must be told the real import path explicitly, not just
+        shown it once in a "Module:" line -- this is the fix for issue #6,
+        where the model fabricated "from your_module import X" placeholder
+        imports when it had no real module path to work from.
+        """
+        context = {
+            "seed": {"function_name": "send", "module": "requests.sessions"},
+            "context": {},
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "from requests.sessions import send" in prompt
+        assert "Do not invent a placeholder module" in prompt
+
+    def test_missing_seed_module_omits_import_instruction(self):
+        """No module info available (e.g. an older KG snapshot without the
+        field) must not produce a broken/empty import instruction -- it's
+        simply omitted, same as any other optional section.
+        """
+        context = {"seed": {"function_name": "send"}, "context": {}, "instructions": {}}
+        prompt = build_prompt(context)
+
+        assert "Do not invent a placeholder module" not in prompt
+
+    def test_context_nodes_without_module_fall_back_to_bare_name(self):
+        """A caller/callee/related entry with no module info (e.g. an
+        external stdlib symbol the KG didn't resolve a filepath for) must
+        still render its bare name rather than crashing or showing "None.name".
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "callers": [{"name": "caller_without_module"}],
+                "callees": [{"name": "callee_without_module"}],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "caller_without_module" in prompt
+        assert "None.caller_without_module" not in prompt
 
     def test_dispatches_on_seed_key_presence(self):
         """The dispatch in build_prompt keys off whether "seed" is a
