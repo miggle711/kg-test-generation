@@ -221,6 +221,21 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
             parts.append(f"- {rel.get('type', '')}: {_qualified_name(rel)}")
         parts.append("")
 
+    if context.get("sibling_methods"):
+        # Context a flat single-function extraction (the baseline arm)
+        # structurally cannot provide -- other methods on the seed's own
+        # class (e.g. __init__, or a setup method like prepare()) whose
+        # side effects the seed's own body depends on but doesn't itself
+        # establish (see issue #50: this caused generated tests to
+        # instantiate an object and call the seed method directly without
+        # ever calling the real setup method that initializes state the
+        # seed method reads unconditionally).
+        parts.append("## Other Methods on the Same Class:")
+        for sm in context["sibling_methods"]:
+            parts.append(f"- {_qualified_name(sm)}")
+        parts.append("")
+        parts.extend(_render_source_snippets("Method", context["sibling_methods"]))
+
     if context.get("existing_tests"):
         parts.append("## Existing Tests (for reference):")
         # Capped to 2 (not the 3 previously used for names-only) now that

@@ -240,6 +240,53 @@ class TestBuildPrompt:
         assert "caller_no_source" in prompt
         assert "```python\n```" not in prompt
 
+    def test_sibling_methods_are_rendered(self):
+        """Issue #50: other methods on the seed's own class (e.g.
+        __init__, or a setup method like prepare()) are context a flat
+        single-function extraction (baseline) structurally cannot
+        provide -- must actually reach the prompt, not just be computed.
+        """
+        context = {
+            "seed": {"function_name": "prepare_content_length", "class_name": "PreparedRequest"},
+            "context": {
+                "sibling_methods": [
+                    {
+                        "name": "prepare", "module": "requests.models", "class_name": "PreparedRequest",
+                        "source_code": "def prepare(self, ...):\n    self.headers = {}\n",
+                    },
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "Other Methods on the Same Class" in prompt
+        assert "def prepare(self, ...):" in prompt
+        assert "self.headers = {}" in prompt
+
+    def test_sibling_methods_bodies_capped_at_three(self):
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "sibling_methods": [
+                    {"name": f"method_{i}", "source_code": f"def method_{i}(self): pass\n"}
+                    for i in range(9)
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        for i in range(9):
+            assert f"method_{i}" in prompt
+        assert prompt.count("```python") == 4  # seed signature (empty) + 3 sibling bodies
+
+    def test_no_sibling_methods_omits_the_section(self):
+        context = {"seed": {"function_name": "f"}, "context": {}, "instructions": {}}
+        prompt = build_prompt(context)
+
+        assert "Other Methods on the Same Class" not in prompt
+
     def test_seed_module_produces_explicit_import_instruction(self):
         """The model must be told the real import path explicitly, not just
         shown it once in a "Module:" line -- this is the fix for issue #6,
