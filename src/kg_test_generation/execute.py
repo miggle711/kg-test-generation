@@ -68,6 +68,7 @@ def run_test_file(
     test_file: Path,
     repo_checkout: Path,
     timeout: int = 60,
+    python_executable: str = "python3",
 ) -> ExecutionResult:
     """Run a generated test file against a repo checkout via subprocess.
 
@@ -83,6 +84,12 @@ def run_test_file(
                  it (guards against a generated test that hangs, e.g. an
                  accidental infinite loop or a real network call with no
                  timeout of its own).
+        python_executable: Path to the Python interpreter to run pytest
+                            with. Defaults to whatever "python3" resolves
+                            to on PATH; pass a venv's interpreter (e.g.
+                            "<venv>/bin/python") to run against a repo's
+                            own installed dependencies rather than
+                            whatever's importable in the calling process.
 
     Returns:
         ExecutionResult with per-test pass/fail and captured output.
@@ -92,7 +99,7 @@ def run_test_file(
 
     try:
         proc = subprocess.run(
-            ["python3", "-m", "pytest", str(test_file), f"--junit-xml={junit_path}"],
+            [python_executable, "-m", "pytest", str(test_file), f"--junit-xml={junit_path}"],
             cwd=repo_checkout,
             capture_output=True,
             text=True,
