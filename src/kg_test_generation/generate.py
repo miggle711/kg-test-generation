@@ -115,6 +115,34 @@ def _qualified_name(node: Dict) -> str:
     return name
 
 
+def _render_source_snippets(label: str, nodes: list, limit: int = 3) -> list:
+    """Render real source bodies for up to `limit` nodes that have one.
+
+    Callers/callees are often numerous (a seed can have dozens -- e.g.
+    issue #18 found 33 callees on one real instance) and their names are
+    already listed in full above this; capping the bodies shown keeps
+    token cost bounded (see #18/#49's verbosity concerns) while giving the
+    model at least a few real implementations to read instead of only
+    knowing that something is called (see issue #30: LLMSerializer
+    already includes source_code for every caller/callee via
+    _node_to_snippet, but it was never rendered here -- the model had no
+    way to know what a callee actually does, e.g. which exception it
+    raises, without seeing its body).
+    """
+    parts = []
+    shown = 0
+    for node in nodes:
+        if shown >= limit:
+            break
+        source_code = node.get("source_code", "")
+        if not source_code:
+            continue
+        parts.append(f"### {label}: {_qualified_name(node)}")
+        parts.extend(["```python", source_code, "```", ""])
+        shown += 1
+    return parts
+
+
 def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
     """Build a prompt from context.build_kg_augmented_context()'s
     hierarchical {seed, context, instructions} payload.
@@ -178,12 +206,14 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
         for caller in context["callers"]:
             parts.append(f"- {_qualified_name(caller)}")
         parts.append("")
+        parts.extend(_render_source_snippets("Caller", context["callers"]))
 
     if context.get("callees"):
         parts.append("## Callees (Functions called by this function):")
         for callee in context["callees"]:
             parts.append(f"- {_qualified_name(callee)}")
         parts.append("")
+        parts.extend(_render_source_snippets("Callee", context["callees"]))
 
     if context.get("related"):
         parts.append("## Related Classes:")
@@ -193,8 +223,17 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
 
     if context.get("existing_tests"):
         parts.append("## Existing Tests (for reference):")
-        for test in context["existing_tests"][:3]:
-            parts.append(f"- {test.get('name', '')}")
+        # Capped to 2 (not the 3 previously used for names-only) now that
+        # full bodies are rendered, not just names -- bounds token cost
+        # while still anchoring the model on the codebase's real mocking
+        # conventions and assertion style (see issue #19: previously
+        # source_code was computed and serialized but silently dropped
+        # here, so the model never saw a single real test from the
+        # codebase, only names).
+        for test in context["existing_tests"][:2]:
+            parts.append(f"### {test.get('name', '')}")
+            if test.get("source_code"):
+                parts.extend(["```python", test["source_code"], "```"])
         parts.append("")
 
     if context.get("patterns"):

@@ -102,7 +102,143 @@ class TestBuildPrompt:
         assert "requests.sessions.rebuild_proxies" in prompt  # callee, qualified
         assert "requests.sessions.SessionRedirectMixin" in prompt  # related, qualified
         assert "test_send_basic" in prompt  # existing test
-        assert "happy path" in prompt  # coverage target
+
+    def test_existing_test_source_code_is_rendered_not_just_name(self):
+        """Previously (issue #19) source_code was computed and serialized
+        by LLMSerializer but silently dropped here -- the model never saw
+        a single real test from the codebase, only names. This is the
+        actual anchor for the codebase's mocking/assertion conventions.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "existing_tests": [
+                    {"name": "test_a", "source_code": "def test_a():\n    assert f() == 1\n"},
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "def test_a():" in prompt
+        assert "assert f() == 1" in prompt
+
+    def test_existing_tests_capped_at_two(self):
+        """Full bodies are real content now, not just names -- capped
+        tighter than before (2, not 3) to bound token cost.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "existing_tests": [
+                    {"name": f"test_{i}", "source_code": f"def test_{i}():\n    pass\n"}
+                    for i in range(5)
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "test_0" in prompt
+        assert "test_1" in prompt
+        assert "test_2" not in prompt
+
+    def test_existing_test_without_source_code_falls_back_to_name_only(self):
+        """A test node with no source_code (e.g. an older/incomplete KG
+        snapshot) must not render an empty code block -- just the name,
+        same as before this fix.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {"existing_tests": [{"name": "test_no_source"}]},
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "test_no_source" in prompt
+        assert "```python\n```" not in prompt
+
+    def test_caller_source_code_is_rendered_not_just_qualified_name(self):
+        """Previously (issue #30) source_code was already computed and
+        serialized for every caller/callee (LLMSerializer._node_to_snippet),
+        but this repo's prompt-rendering only ever showed the qualified
+        name. The model had no way to know what a caller/callee actually
+        does -- e.g. which exception a callee raises -- without seeing its
+        body (see issue #27's exception-guessing failures).
+        """
+        context = {
+            "seed": {"function_name": "send"},
+            "context": {
+                "callers": [
+                    {
+                        "name": "request", "module": "requests.sessions",
+                        "source_code": "def request(self, method, url):\n    return self.send(...)\n",
+                    },
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "def request(self, method, url):" in prompt
+        assert "return self.send(...)" in prompt
+
+    def test_callee_source_code_is_rendered(self):
+        context = {
+            "seed": {"function_name": "send"},
+            "context": {
+                "callees": [
+                    {
+                        "name": "get_adapter", "module": "requests.sessions",
+                        "source_code": "def get_adapter(self, url):\n    raise InvalidSchema(url)\n",
+                    },
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "def get_adapter(self, url):" in prompt
+        assert "raise InvalidSchema(url)" in prompt
+
+    def test_caller_callee_bodies_capped_at_three(self):
+        """Callers/callees can be numerous (issue #18 found 33 callees on
+        one real instance) -- bodies must be capped independently of the
+        (uncapped) qualified-name list above them, to bound token cost.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "callees": [
+                    {"name": f"callee_{i}", "source_code": f"def callee_{i}(): pass\n"}
+                    for i in range(10)
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        # All 10 names still listed (unchanged behavior).
+        for i in range(10):
+            assert f"callee_{i}" in prompt
+        # But only 3 bodies rendered (the seed's own empty Signature
+        # block also renders a ```python fence, hence 3 + 1 = 4 total).
+        assert prompt.count("```python") == 4
+
+    def test_caller_without_source_code_renders_name_only(self):
+        """A caller/callee with no source_code (e.g. an external stdlib
+        symbol the KG didn't resolve a body for) must not render an empty
+        code block -- just its qualified name, same as before this fix.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {"callers": [{"name": "caller_no_source"}]},
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "caller_no_source" in prompt
+        assert "```python\n```" not in prompt
 
     def test_seed_module_produces_explicit_import_instruction(self):
         """The model must be told the real import path explicitly, not just
