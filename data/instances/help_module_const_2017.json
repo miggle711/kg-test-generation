@@ -1,0 +1,9 @@
+{
+  "name": "help_module_const_2017",
+  "repo": "psf/requests",
+  "base_commit": "12c74567890666eac84575083d4ace6c6aeb8fb8",
+  "patch_file": "patches/help_module_const_2017.diff",
+  "code_file": "requests/help.py",
+  "test_file": "tests/test_help.py",
+  "note": "NONE: module-level constant/dict change"
+}

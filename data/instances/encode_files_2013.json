@@ -1,0 +1,9 @@
+{
+  "name": "encode_files_2013",
+  "repo": "psf/requests",
+  "base_commit": "f75ee9fb6e9c651ce49a438634b6e9ced0560e1b",
+  "patch_file": "patches/encode_files_2013.diff",
+  "code_file": "requests/models.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function"
+}

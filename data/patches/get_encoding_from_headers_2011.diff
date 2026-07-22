@@ -1,0 +1,31 @@
+diff --git a/requests/utils.py b/requests/utils.py
+index d21966cd..27423ee6 100644
+--- a/requests/utils.py
++++ b/requests/utils.py
+@@ -143,22 +143,24 @@ def get_encodings_from_content(content):
+     return charset_re.findall(content)
+ 
+ 
+ def get_encoding_from_headers(headers):
+     """Returns encodings from given HTTP Header Dict.
+ 
+     :param headers: dictionary to extract encoding from.
+     """
+ 
+     content_type = headers.get('content-type')
+-    if not content_type :
+-        return
++
++    if not content_type:
++        return None
++
+     content_type, params = cgi.parse_header(content_type)
+ 
+     if 'charset' in params:
+         return params['charset'].strip("'\"")
+ 
+ 
+ def unicode_from_html(content):
+     """Attempts to decode an HTML string into unicode.
+     If unsuccessful, the original content is returned.
+     """

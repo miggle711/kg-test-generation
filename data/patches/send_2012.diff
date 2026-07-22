@@ -1,0 +1,38 @@
+diff --git a/requests/sessions.py b/requests/sessions.py
+index 0c2de658..a8e75f82 100644
+--- a/requests/sessions.py
++++ b/requests/sessions.py
+@@ -332,29 +332,33 @@ class Session(object):
+         :param data: (optional) Dictionary or bytes to send in the body of the :class:`Request`.
+         :param \*\*kwargs: Optional arguments that ``request`` takes.
+         """
+ 
+         return self.request('patch', url,  data=data, **kwargs)
+ 
+     def delete(self, url, **kwargs):
+         """Sends a DELETE request. Returns :class:`Response` object.
+ 
+         :param url: URL for the new :class:`Request` object.
+         :param \*\*kwargs: Optional arguments that ``request`` takes.
+         """
+ 
+         return self.request('delete', url, **kwargs)
+ 
++    def send(self, request):
++        """Send a given PreparedRequest."""
++        return request.send()
++
+     def __getstate__(self):
+         return dict((attr, getattr(self, attr, None)) for attr in self.__attrs__)
+ 
+     def __setstate__(self, state):
+         for attr, value in state.items():
+             setattr(self, attr, value)
+ 
+         self.init_poolmanager()
+ 
+ 
+ def session(**kwargs):
+     """Returns a :class:`Session` for context-management."""
+ 
+     return Session(**kwargs)

@@ -1,0 +1,30 @@
+diff --git a/requests/status_codes.py b/requests/status_codes.py
+index 96b86ddb..ff462c6c 100644
+--- a/requests/status_codes.py
++++ b/requests/status_codes.py
+@@ -97,23 +97,24 @@ _codes = {
+     509: ('bandwidth_limit_exceeded', 'bandwidth'),
+     510: ('not_extended',),
+     511: ('network_authentication_required', 'network_auth', 'network_authentication'),
+ }
+ 
+ codes = LookupDict(name='status_codes')
+ 
+ def _init():
+     for code, titles in _codes.items():
+         for title in titles:
+             setattr(codes, title, code)
+             if not title.startswith(('\\', '/')):
+                 setattr(codes, title.upper(), code)
+ 
+     def doc(code):
+         names = ', '.join('``%s``' % n for n in _codes[code])
+         return '* %d: %s' % (code, names)
+ 
+     global __doc__
+     __doc__ = (__doc__ + '\n' +
+-               '\n'.join(doc(code) for code in sorted(_codes)))
++               '\n'.join(doc(code) for code in sorted(_codes))
++               if __doc__ is not None else None)
+ 
+ _init()

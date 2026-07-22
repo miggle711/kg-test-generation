@@ -1,0 +1,9 @@
+{
+  "name": "httpbasicauth_dunder_2016",
+  "repo": "psf/requests",
+  "base_commit": "cbb0830ee9072d7d0bf8f28efe4e5825d69a9eb4",
+  "patch_file": "patches/httpbasicauth_dunder_2016.diff",
+  "code_file": "requests/auth.py",
+  "test_file": "test_requests.py",
+  "note": "multi-method (class + __eq__ + __ne__)"
+}

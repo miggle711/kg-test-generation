@@ -1,0 +1,9 @@
+{
+  "name": "connecttimeout_2014",
+  "repo": "psf/requests",
+  "base_commit": "f0b9b60f6298ec743f2b470819cd249a041845d3",
+  "patch_file": "patches/connecttimeout_2014.diff",
+  "code_file": "requests/exceptions.py",
+  "test_file": "test_requests.py",
+  "note": "clean single class"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "send_2012",
+  "repo": "psf/requests",
+  "base_commit": "edfd0990b57199394446fed73b6f0ce0838ad43d",
+  "patch_file": "patches/send_2012.diff",
+  "code_file": "requests/sessions.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "api_multi_verb_2012",
+  "repo": "psf/requests",
+  "base_commit": "0769ee3b6dce489733dd34e54072395d9e92e4da",
+  "patch_file": "patches/api_multi_verb_2012.diff",
+  "code_file": "requests/api.py",
+  "test_file": "test_requests.py",
+  "note": "multi-function (patch/post/put/request)"
+}

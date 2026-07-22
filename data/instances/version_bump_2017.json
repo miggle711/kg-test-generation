@@ -1,0 +1,9 @@
+{
+  "name": "version_bump_2017",
+  "repo": "psf/requests",
+  "base_commit": "c1f32f68f66e7196b69369e36d11125738ee6367",
+  "patch_file": "patches/version_bump_2017.diff",
+  "code_file": "requests/__version__.py",
+  "test_file": "tests/test_requests.py",
+  "note": "NONE: version string bump"
+}

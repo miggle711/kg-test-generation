@@ -1,0 +1,33 @@
+diff --git a/requests/packages/oreos/core.py b/requests/packages/oreos/core.py
+index 0cba1282..359d7447 100644
+--- a/requests/packages/oreos/core.py
++++ b/requests/packages/oreos/core.py
+@@ -1,25 +1,24 @@
+ # -*- coding: utf-8 -*-
+ 
+ """
+ oreos.core
+ ~~~~~~~~~~
+ 
+ The creamy white center.
+ """
+ 
+-from .structures import MultiDict
+ from .monkeys import SimpleCookie
+ 
+ 
+ def dict_from_string(s):
+     """Returns a MultiDict with Cookies."""
+ 
+-    cookies = MultiDict()
++    cookies = dict()
+ 
+     c = SimpleCookie()
+     c.load(s)
+ 
+     for k,v in c.items():
+-        cookies.add(k, v.value)
++        cookies.update({k: v.value})
+ 
+     return cookies
+\ No newline at end of file

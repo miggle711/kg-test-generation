@@ -1,0 +1,9 @@
+{
+  "name": "encode_files_params_2012",
+  "repo": "psf/requests",
+  "base_commit": "664880db62ad20cf754e3220b0545c79718a3e77",
+  "patch_file": "patches/encode_files_params_2012.diff",
+  "code_file": "requests/models.py",
+  "test_file": "test_requests.py",
+  "note": "multi-function (class + 2 methods, messy)"
+}

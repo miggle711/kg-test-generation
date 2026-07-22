@@ -1,0 +1,73 @@
+diff --git a/requests/auth.py b/requests/auth.py
+index 2af55fb5..46104ab5 100644
+--- a/requests/auth.py
++++ b/requests/auth.py
+@@ -35,30 +35,38 @@ def _basic_auth_str(username, password):
+ 
+ 
+ class AuthBase(object):
+     """Base class that all auth implementations derive from"""
+ 
+     def __call__(self, r):
+         raise NotImplementedError('Auth hooks must be callable.')
+ 
+ 
+ class HTTPBasicAuth(AuthBase):
+     """Attaches HTTP Basic Authentication to the given Request object."""
+     def __init__(self, username, password):
+         self.username = username
+         self.password = password
+ 
++    def __eq__(self, other):
++        if not isinstance(other, HTTPBasicAuth):
++            return NotImplemented
++        return self.username == other.username and self.password == other.password
++
++    def __ne__(self, other):
++        return not self == other
++
+     def __call__(self, r):
+         r.headers['Authorization'] = _basic_auth_str(self.username, self.password)
+         return r
+ 
+ 
+ class HTTPProxyAuth(HTTPBasicAuth):
+     """Attaches HTTP Proxy Authentication to a given Request object."""
+     def __call__(self, r):
+         r.headers['Proxy-Authorization'] = _basic_auth_str(self.username, self.password)
+         return r
+ 
+ 
+ class HTTPDigestAuth(AuthBase):
+     """Attaches HTTP Digest Authentication to the given Request object."""
+     def __init__(self, username, password):
+@@ -209,15 +217,29 @@ class HTTPDigestAuth(AuthBase):
+         if self._thread_local.last_nonce:
+             r.headers['Authorization'] = self.build_digest_header(r.method, r.url)
+         try:
+             self._thread_local.pos = r.body.tell()
+         except AttributeError:
+             # In the case of HTTPDigestAuth being reused and the body of
+             # the previous request was a file-like object, pos has the
+             # file position of the previous body. Ensure it's set to
+             # None.
+             self._thread_local.pos = None
+         r.register_hook('response', self.handle_401)
+         r.register_hook('response', self.handle_redirect)
+         self._thread_local.num_401_calls = 1
+ 
+         return r
++
++    def __eq__(self, other):
++        if not isinstance(other, HTTPDigestAuth):
++            return NotImplemented
++        return self.username == other.username and \
++            self.password == other.password and \
++            self.last_nonce == other.last_nonce and \
++            self.nonce_count == other.nonce_count and \
++            self.chal == other.chal and \
++            self.pos == other.pos and \
++            self.num_401_calls == other.num_401_calls
++
++    def __ne__(self, other):
++        return not self == other

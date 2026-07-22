@@ -1,0 +1,9 @@
+{
+  "name": "session_init_request_2011",
+  "repo": "psf/requests",
+  "base_commit": "4dc48b6521805515b9a3a7a06670d9f5984dd45c",
+  "patch_file": "patches/session_init_request_2011.diff",
+  "code_file": "requests/sessions.py",
+  "test_file": "test_requests.py",
+  "note": "multi-method (class + __init__ + request)"
+}

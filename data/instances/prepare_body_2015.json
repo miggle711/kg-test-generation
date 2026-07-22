@@ -1,0 +1,9 @@
+{
+  "name": "prepare_body_2015",
+  "repo": "psf/requests",
+  "base_commit": "3475399a472ad0813a18d0b1fbeaec773f6cdeab",
+  "patch_file": "patches/prepare_body_2015.diff",
+  "code_file": "requests/models.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function"
+}
