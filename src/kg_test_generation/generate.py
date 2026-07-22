@@ -51,23 +51,49 @@ def build_prompt(context: Dict) -> str:
 
 def _build_baseline_prompt(context: Dict) -> str:
     """Build a prompt from context.build_baseline_context()'s flat payload:
-    {function_name, source_code, file_path}. No callers/callees/related
-    classes -- that's the whole point of the baseline arm.
+    {function_name, class_name, source_code, file_path}. No callers/callees/
+    related classes -- that's the whole point of the baseline arm.
     """
+    class_name = context.get("class_name", "")
+    function_name = context.get("function_name", "")
+    file_path = context.get("file_path", "")
+
     parts = [
         "# FUNCTION TO TEST",
-        f"Function: {context.get('function_name', '')}",
-        f"File: {context.get('file_path', '')}",
+        f"Function: {function_name}",
+        f"File: {file_path}",
+    ]
+    if class_name:
+        parts.append(f"Class: {class_name}")
+    parts.extend([
         "",
         "Source Code:",
         "```python",
         context.get("source_code", ""),
         "```",
         "",
+    ])
+
+    if class_name:
+        parts.extend([
+            f"IMPORTANT: `{function_name}` is a method of `{class_name}`, not a "
+            f"standalone function. Import the class and call the method on an "
+            f"instance -- do not attempt to import `{function_name}` directly, "
+            "it is not a module-level name.",
+            "",
+        ])
+    elif function_name:
+        parts.extend([
+            f"IMPORTANT: `{function_name}` is a module-level function in "
+            f"`{file_path}`. Do not invent a placeholder module name.",
+            "",
+        ])
+
+    parts.extend([
         "# GENERATE COMPREHENSIVE TESTS",
         "Create pytest-compatible test cases below:",
         "",
-    ]
+    ])
     return "\n".join(parts)
 
 

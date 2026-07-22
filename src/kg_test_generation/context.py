@@ -81,6 +81,7 @@ def build_baseline_context(instance: Dict) -> Dict:
     Returns:
         {
             "function_name": str,
+            "class_name": str,       # owning class name, "" if a module-level function
             "source_code": str,      # the target function's own source
             "file_path": str,        # instance['code_file']
         }
@@ -89,9 +90,10 @@ def build_baseline_context(instance: Dict) -> Dict:
         ValueError: If the target function can't be found in code_file.
     """
     target_name = resolve_target_function(instance)
-    source_code = _extract_function_source(instance, target_name)
+    source_code, class_name = _extract_function_source(instance, target_name)
     return {
         "function_name": target_name,
+        "class_name": class_name,
         "source_code": source_code,
         "file_path": instance["code_file"],
     }
@@ -133,10 +135,20 @@ def build_kg_augmented_context(instance: Dict, depth: int = 2) -> Dict:
     return serialize_context(context)
 
 
-def _extract_function_source(instance: Dict, function_name: str) -> str:
+def _extract_function_source(instance: Dict, function_name: str) -> tuple:
     """Extract a named function/method's source from instance['code_file']
     at instance['base_commit'], independent of any KG machinery -- the
     baseline arm must not depend on KG construction at all.
+
+    Returns:
+        (source_code, class_name) -- class_name is "" for a module-level
+        function, else the name of its enclosing class. Without this, the
+        baseline prompt has no way to tell the model whether the target is
+        importable directly or needs to be called on a class instance, and
+        the model has to guess -- sometimes wrong (see issue #25: this
+        caused a hard ImportError for a method the model assumed was a
+        free function, and an AttributeError for a method attributed to
+        the wrong of two similarly-named classes).
     """
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp) / "src"
@@ -144,17 +156,18 @@ def _extract_function_source(instance: Dict, function_name: str) -> str:
         file_path = dest / instance["code_file"]
         source = file_path.read_text(encoding="utf-8", errors="replace")
 
-    function_source = _find_function_source(source, function_name)
-    if function_source is None:
+    result = _find_function_source(source, function_name)
+    if result is None:
         raise ValueError(
             f"Changed function '{function_name}' not found in "
             f"{instance['code_file']} at {instance['base_commit'][:8]}"
         )
-    return function_source
+    return result
 
 
-def _find_function_source(source: str, function_name: str) -> Optional[str]:
-    """Find a top-level function or method's source by name via ast.
+def _find_function_source(source: str, function_name: str) -> Optional[tuple]:
+    """Find a top-level function or method's source (and its enclosing
+    class name, if any) by name via ast.
 
     Returns the first match (module-level function, or method of any
     class) -- matches PatchParser's own name-only granularity, which
@@ -162,7 +175,23 @@ def _find_function_source(source: str, function_name: str) -> Optional[str]:
     """
     tree = ast.parse(source)
     lines = source.splitlines(keepends=True)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
-            return "".join(lines[node.lineno - 1 : node.end_lineno])
-    return None
+
+    def _search(node, enclosing_class):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == function_name:
+                func_source = "".join(lines[child.lineno - 1 : child.end_lineno])
+                return func_source, (enclosing_class or "")
+            if isinstance(child, ast.ClassDef):
+                found = _search(child, child.name)
+            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # A def nested inside this function's body is a closure,
+                # not a class method, even if this function itself is one
+                # -- reset enclosing_class rather than propagate it further.
+                found = _search(child, None)
+            else:
+                found = _search(child, enclosing_class)
+            if found is not None:
+                return found
+        return None
+
+    return _search(tree, None)

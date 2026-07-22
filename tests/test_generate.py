@@ -35,6 +35,38 @@ class TestBuildPrompt:
         assert "EXECUTION CONTEXT" not in prompt
         assert "Callers" not in prompt
 
+    def test_baseline_method_produces_class_instantiation_instruction(self):
+        """A method (class_name present) must not get a plain
+        "import function_name directly" instruction -- that import doesn't
+        exist for a method (see issue #25: the model fabricated exactly
+        that, "from requests.auth import handle_401", for a method of
+        HTTPDigestAuth, and separately attributed another method to the
+        wrong of two similarly-named classes).
+        """
+        context = {
+            "function_name": "handle_401",
+            "class_name": "HTTPDigestAuth",
+            "source_code": "def handle_401(self, r, **kwargs):\n    ...\n",
+            "file_path": "requests/auth.py",
+        }
+        prompt = build_prompt(context)
+
+        assert "Class: HTTPDigestAuth" in prompt
+        assert "method of `HTTPDigestAuth`" in prompt
+        assert "do not attempt to import `handle_401` directly" in prompt
+
+    def test_baseline_function_without_class_name_keeps_plain_instruction(self):
+        context = {
+            "function_name": "get",
+            "class_name": "",
+            "source_code": "def get(url, **kwargs):\n    ...\n",
+            "file_path": "requests/api.py",
+        }
+        prompt = build_prompt(context)
+
+        assert "module-level function in `requests/api.py`" in prompt
+        assert "Class:" not in prompt
+
     def test_kg_augmented_shape_produces_hierarchical_prompt(self):
         context = {
             "seed": {
