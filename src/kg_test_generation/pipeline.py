@@ -4,20 +4,20 @@ pipeline.py
 Top-level orchestration: instance -> context -> generate -> parse ->
 execute -> score, for both the baseline and KG-augmented arms.
 
-Each run gets a fresh, disposable virtual environment: the target repo's
-own dependencies (needed for the generated test file to even import) are
-installed there, never into the environment this pipeline itself runs in,
-and the whole checkout+venv is deleted afterward regardless of outcome.
-This is NOT sandboxing against malicious code (see issue #8 for the
-Docker follow-up) -- it only isolates *dependency installation* between
-runs and keeps the calling environment clean.
+Each run gets a fresh repo checkout, and dependency installation +
+pytest execution happen inside a disposable Docker container (see
+execute.py's container_image path) rather than on the host. This isn't
+just sandboxing against malicious generated code (issue #8) -- it's also
+the fix for issue #13: old target commits pin dependencies (e.g.
+urllib3's vendored six.moves shim, collections.Mapping) that are
+incompatible with whatever Python happens to be installed on the host.
+DEFAULT_CONTAINER_IMAGE pins a Python version contemporaneous with the
+benchmark repos this pipeline currently targets (TestGenEval/SWE-bench-era
+commits), so the container -- not the host -- decides which Python
+actually runs the generated test.
 """
 
-import shutil
-import subprocess
-import sys
 import tempfile
-import venv
 from pathlib import Path
 from typing import Dict
 
@@ -29,46 +29,51 @@ from kg_test_generation.generate import GroqTestGenerator
 from kg_test_generation.metrics import score
 from kg_test_generation.parse_output import extract_test_code, write_test_file
 
+DEFAULT_CONTAINER_IMAGE = "python:3.8-slim"
 
-def run_baseline(instance: Dict) -> Dict:
+
+def run_baseline(instance: Dict, container_image: str = DEFAULT_CONTAINER_IMAGE) -> Dict:
     """Run the full baseline (no-KG) pipeline for one instance.
 
     Args:
         instance: Dict with repo, base_commit, patch, code_file, test_file.
+        container_image: Docker image to run the generated test in (see
+                         execute.run_test_file). Defaults to a Python
+                         version compatible with older benchmark commits.
 
     Returns:
         Metrics dict for this instance (see metrics.score).
     """
     context = build_baseline_context(instance)
-    return _generate_and_score(instance, context)
+    return _generate_and_score(instance, context, container_image)
 
 
-def run_kg_augmented(instance: Dict, depth: int = 2) -> Dict:
+def run_kg_augmented(
+    instance: Dict, depth: int = 2, container_image: str = DEFAULT_CONTAINER_IMAGE
+) -> Dict:
     """Run the full KG-augmented pipeline for one instance.
 
     Args:
         instance: Same shape as run_baseline.
         depth: BFS depth passed through to kg_construction's subgraph extraction.
+        container_image: Same as run_baseline.
 
     Returns:
         Metrics dict for this instance (see metrics.score).
     """
     context = build_kg_augmented_context(instance, depth=depth)
-    return _generate_and_score(instance, context)
+    return _generate_and_score(instance, context, container_image)
 
 
-def _generate_and_score(instance: Dict, context: Dict) -> Dict:
+def _generate_and_score(instance: Dict, context: Dict, container_image: str) -> Dict:
     """Shared tail of both arms: generate -> parse -> execute -> score,
-    inside a fresh repo checkout + disposable venv that's torn down when
-    this function returns, regardless of outcome.
+    inside a fresh repo checkout that's torn down when this function
+    returns, regardless of outcome. Dependency install + pytest execution
+    happen inside container_image, not on the host.
     """
     with tempfile.TemporaryDirectory() as tmp:
         repo_checkout = Path(tmp) / "repo"
         RepoManager().extract_at_commit(instance["repo"], instance["base_commit"], repo_checkout)
-
-        venv_dir = Path(tmp) / "venv"
-        python_bin = _create_disposable_venv(venv_dir)
-        _install_target_repo_deps(python_bin, repo_checkout)
 
         generator = GroqTestGenerator()
         raw_output = generator.generate(context)
@@ -77,41 +82,10 @@ def _generate_and_score(instance: Dict, context: Dict) -> Dict:
         test_file = repo_checkout / "test_generated.py"
         write_test_file(test_code, test_file)
 
-        result = run_test_file(test_file, repo_checkout, python_executable=str(python_bin))
+        result = run_test_file(test_file, repo_checkout, container_image=container_image)
         return score(result)
-        # tmp (repo_checkout + venv_dir) is deleted here on context exit,
-        # whether or not the above raised.
-
-
-def _create_disposable_venv(venv_dir: Path) -> Path:
-    """Create a fresh virtual environment and return its Python executable path."""
-    venv.create(venv_dir, with_pip=True)
-    if sys.platform == "win32":
-        return venv_dir / "Scripts" / "python.exe"
-    return venv_dir / "bin" / "python"
-
-
-def _install_target_repo_deps(python_bin: Path, repo_checkout: Path) -> None:
-    """Install the target repo's own dependencies (needed for the
-    generated test file to import it) plus pytest, into the disposable
-    venv -- never into the environment this pipeline itself runs in.
-
-    Best-effort: if the target repo has no setup.py/pyproject.toml at all,
-    installing it is skipped rather than failing the whole run (the
-    generated test will simply fail to import, which run_test_file
-    already handles as a collection failure).
-    """
-    subprocess.run(
-        [str(python_bin), "-m", "pip", "install", "--quiet", "pytest"],
-        check=True, timeout=120,
-    )
-
-    has_setup = (repo_checkout / "setup.py").exists() or (repo_checkout / "pyproject.toml").exists()
-    if has_setup:
-        subprocess.run(
-            [str(python_bin), "-m", "pip", "install", "--quiet", "-e", str(repo_checkout)],
-            check=False, timeout=300,  # best-effort: a broken setup.py must not abort the run
-        )
+        # tmp (repo_checkout) is deleted here on context exit, whether or
+        # not the above raised.
 
 
 def main():

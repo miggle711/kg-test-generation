@@ -5,13 +5,14 @@ Runs a generated test file against a target repo checkout and reports
 per-test pass/fail results.
 
 v1 decision (issue #1): plain subprocess against a local checkout, not
-Docker. repo-kg-construction's RepoManager already does commit-level
-source extraction this way (git archive into a temp dir, no checkout of
-the actual working tree) -- reused here for isolation between runs at
-different commits, though this does NOT sandbox untrusted code execution
-the way Docker would. Acceptable for a research prototype running known
-benchmark repos (TestGenEval/SWE-bench); would need revisiting before
-running genuinely untrusted input.
+Docker -- acceptable for a research prototype running known benchmark
+repos (TestGenEval/SWE-bench). Revisited in issue #8/#13: plain subprocess
+runs on whatever Python is on the host, which breaks for old target
+commits whose pinned dependencies (e.g. urllib3's vendored six.moves
+shim, collections.Mapping) are incompatible with modern Python -- not a
+sandboxing gap so much as a "which Python even runs this" gap. run_test_file
+now dispatches to a Docker-based execution path when a container_image is
+given, matching the host's Python version to the target commit's era.
 
 Uses pytest's built-in --junit-xml reporting (no extra plugin needed) to
 get structured per-test results, since Any Pass@1 needs to know whether
@@ -69,8 +70,9 @@ def run_test_file(
     repo_checkout: Path,
     timeout: int = 60,
     python_executable: str = "python3",
+    container_image: Optional[str] = None,
 ) -> ExecutionResult:
-    """Run a generated test file against a repo checkout via subprocess.
+    """Run a generated test file against a repo checkout.
 
     Args:
         test_file: Path to the generated test file (output of
@@ -80,20 +82,41 @@ def run_test_file(
         repo_checkout: Path to the target repo checked out at the
                        instance's base_commit (e.g. via
                        kg_construction.kg.repo_manager.RepoManager).
-        timeout: Wall-clock seconds to allow the subprocess before killing
-                 it (guards against a generated test that hangs, e.g. an
+        timeout: Wall-clock seconds to allow the run before killing it
+                 (guards against a generated test that hangs, e.g. an
                  accidental infinite loop or a real network call with no
                  timeout of its own).
         python_executable: Path to the Python interpreter to run pytest
-                            with. Defaults to whatever "python3" resolves
-                            to on PATH; pass a venv's interpreter (e.g.
-                            "<venv>/bin/python") to run against a repo's
-                            own installed dependencies rather than
-                            whatever's importable in the calling process.
+                            with when container_image is None. Defaults to
+                            whatever "python3" resolves to on PATH; pass a
+                            venv's interpreter (e.g. "<venv>/bin/python")
+                            to run against a repo's own installed
+                            dependencies rather than whatever's importable
+                            in the calling process. Ignored when
+                            container_image is set (the container's own
+                            python3 is used instead).
+        container_image: If given, run pytest inside this Docker image
+                          instead of a host subprocess -- use for target
+                          commits whose pinned dependencies don't import
+                          under the host's Python (see issue #13). The
+                          image must have pip and (ideally) pytest
+                          available; repo_checkout's own deps are still
+                          installed fresh inside the container.
 
     Returns:
         ExecutionResult with per-test pass/fail and captured output.
     """
+    if container_image is not None:
+        return _run_test_file_in_container(test_file, repo_checkout, timeout, container_image)
+    return _run_test_file_subprocess(test_file, repo_checkout, timeout, python_executable)
+
+
+def _run_test_file_subprocess(
+    test_file: Path,
+    repo_checkout: Path,
+    timeout: int,
+    python_executable: str,
+) -> ExecutionResult:
     with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as f:
         junit_path = Path(f.name)
 
@@ -128,6 +151,70 @@ def run_test_file(
         )
     finally:
         junit_path.unlink(missing_ok=True)
+
+
+def _run_test_file_in_container(
+    test_file: Path,
+    repo_checkout: Path,
+    timeout: int,
+    container_image: str,
+) -> ExecutionResult:
+    """Run pytest inside a Docker container, with repo_checkout bind-mounted
+    read-write so pip can install the target repo's own dependencies (and
+    pytest, if the image doesn't already have it) without touching the host.
+
+    The junit-xml report is written inside repo_checkout (under the mount)
+    so it's readable from the host after the container exits -- there's no
+    other shared filesystem between host and container to hand results
+    back through.
+    """
+    junit_name = f".execute_report_{next(tempfile._get_candidate_names())}.xml"
+    junit_path_in_repo = repo_checkout / junit_name
+
+    container_test_path = "/" + str(test_file.relative_to(repo_checkout))
+    docker_cmd = [
+        "docker", "run", "--rm",
+        "-v", f"{repo_checkout}:/workspace",
+        "-w", "/workspace",
+        container_image,
+        "sh", "-c",
+        (
+            "pip install --quiet pytest >/dev/null 2>&1; "
+            "if [ -f setup.py ] || [ -f pyproject.toml ]; then "
+            "pip install --quiet -e . >/dev/null 2>&1; fi; "
+            f"python3 -m pytest {container_test_path.lstrip('/')} --junit-xml={junit_name}"
+        ),
+    ]
+
+    try:
+        proc = subprocess.run(
+            docker_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        test_cases = _parse_junit_xml(junit_path_in_repo)
+        collected = proc.returncode in (0, 1) and bool(test_cases)
+        return ExecutionResult(
+            collected=collected,
+            test_cases=test_cases,
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+            returncode=proc.returncode,
+        )
+    except subprocess.TimeoutExpired as e:
+        return ExecutionResult(
+            collected=False,
+            test_cases=[],
+            stdout=(e.stdout or "").decode() if isinstance(e.stdout, bytes) else (e.stdout or ""),
+            stderr=(
+                ((e.stderr or "").decode() if isinstance(e.stderr, bytes) else (e.stderr or ""))
+                + f"\n[execute.py] Timed out after {timeout}s"
+            ),
+            returncode=-1,
+        )
+    finally:
+        junit_path_in_repo.unlink(missing_ok=True)
 
 
 def _parse_junit_xml(junit_path: Path) -> List[TestCaseResult]:
