@@ -102,7 +102,61 @@ class TestBuildPrompt:
         assert "requests.sessions.rebuild_proxies" in prompt  # callee, qualified
         assert "requests.sessions.SessionRedirectMixin" in prompt  # related, qualified
         assert "test_send_basic" in prompt  # existing test
-        assert "happy path" in prompt  # coverage target
+
+    def test_existing_test_source_code_is_rendered_not_just_name(self):
+        """Previously (issue #19) source_code was computed and serialized
+        by LLMSerializer but silently dropped here -- the model never saw
+        a single real test from the codebase, only names. This is the
+        actual anchor for the codebase's mocking/assertion conventions.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "existing_tests": [
+                    {"name": "test_a", "source_code": "def test_a():\n    assert f() == 1\n"},
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "def test_a():" in prompt
+        assert "assert f() == 1" in prompt
+
+    def test_existing_tests_capped_at_two(self):
+        """Full bodies are real content now, not just names -- capped
+        tighter than before (2, not 3) to bound token cost.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {
+                "existing_tests": [
+                    {"name": f"test_{i}", "source_code": f"def test_{i}():\n    pass\n"}
+                    for i in range(5)
+                ],
+            },
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "test_0" in prompt
+        assert "test_1" in prompt
+        assert "test_2" not in prompt
+
+    def test_existing_test_without_source_code_falls_back_to_name_only(self):
+        """A test node with no source_code (e.g. an older/incomplete KG
+        snapshot) must not render an empty code block -- just the name,
+        same as before this fix.
+        """
+        context = {
+            "seed": {"function_name": "f"},
+            "context": {"existing_tests": [{"name": "test_no_source"}]},
+            "instructions": {},
+        }
+        prompt = build_prompt(context)
+
+        assert "test_no_source" in prompt
+        assert "```python\n```" not in prompt
 
     def test_seed_module_produces_explicit_import_instruction(self):
         """The model must be told the real import path explicitly, not just

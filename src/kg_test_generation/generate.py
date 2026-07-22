@@ -193,8 +193,17 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
 
     if context.get("existing_tests"):
         parts.append("## Existing Tests (for reference):")
-        for test in context["existing_tests"][:3]:
-            parts.append(f"- {test.get('name', '')}")
+        # Capped to 2 (not the 3 previously used for names-only) now that
+        # full bodies are rendered, not just names -- bounds token cost
+        # while still anchoring the model on the codebase's real mocking
+        # conventions and assertion style (see issue #19: previously
+        # source_code was computed and serialized but silently dropped
+        # here, so the model never saw a single real test from the
+        # codebase, only names).
+        for test in context["existing_tests"][:2]:
+            parts.append(f"### {test.get('name', '')}")
+            if test.get("source_code"):
+                parts.extend(["```python", test["source_code"], "```"])
         parts.append("")
 
     if context.get("patterns"):
