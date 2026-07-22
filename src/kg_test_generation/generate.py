@@ -72,13 +72,21 @@ def _build_baseline_prompt(context: Dict) -> str:
 
 
 def _qualified_name(node: Dict) -> str:
-    """Render a context node (caller/callee/related) as "module.name" when
-    a module is known, else bare "name" -- gives the model a real import
-    path for context nodes instead of just a bare, ambiguous name.
+    """Render a context node (caller/callee/related) as "module.Class.name"
+    for a method, "module.name" for a module-level function, or bare "name"
+    when no module is known -- so the model can tell a class method apart
+    from an importable function (see issue #14: without this, methods were
+    indistinguishable from free functions and got fabricated, nonexistent
+    imports).
     """
     name = node.get("name", "")
     module = node.get("module", "")
-    return f"{module}.{name}" if module else name
+    class_name = node.get("class_name", "")
+    if module and class_name:
+        return f"{module}.{class_name}.{name}"
+    if module:
+        return f"{module}.{name}"
+    return name
 
 
 def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
@@ -89,22 +97,40 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
     context = hierarchical_json.get("context", {})
     instructions = hierarchical_json.get("instructions", {})
 
+    class_name = seed.get("class_name", "")
+    function_name = seed.get("function_name", "")
+
     parts = [
         "# SEED FUNCTION (Modified Function to Test)",
-        f"Function: {seed.get('function_name', '')}",
+        f"Function: {function_name}",
         f"Module: {seed.get('module', '')}",
+    ]
+    if class_name:
+        parts.append(f"Class: {class_name}")
+    parts.extend([
         "",
         "Signature:",
         "```python",
         seed.get("signature", ""),
         "```",
         "",
-    ]
+    ])
 
-    if seed.get("module"):
+    if seed.get("module") and class_name:
+        parts.extend([
+            f"IMPORTANT: `{function_name}` is a method of `{class_name}` "
+            f"(module `{seed['module']}`), not a standalone function. Import "
+            f"the class and call the method on an instance, e.g. "
+            f"`from {seed['module']} import {class_name}` then "
+            f"`{class_name}().{function_name}(...)`. Do not attempt to "
+            f"import `{function_name}` directly -- it is not a module-level "
+            "name.",
+            "",
+        ])
+    elif seed.get("module"):
         parts.extend([
             f"IMPORTANT: Import the function/class under test from `{seed['module']}` "
-            f"(e.g. `from {seed['module']} import {seed.get('function_name', '')}`). "
+            f"(e.g. `from {seed['module']} import {function_name}`). "
             "Do not invent a placeholder module name.",
             "",
         ])
