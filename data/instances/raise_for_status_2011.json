@@ -1,0 +1,9 @@
+{
+  "name": "raise_for_status_2011",
+  "repo": "psf/requests",
+  "base_commit": "4cf4362610ae85c6df467b1caad5043bdefed6bf",
+  "patch_file": "patches/raise_for_status_2011.diff",
+  "code_file": "requests/models.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function"
+}

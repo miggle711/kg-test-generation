@@ -1,0 +1,27 @@
+diff --git a/requests/models.py b/requests/models.py
+index fe85a833..898ed66a 100644
+--- a/requests/models.py
++++ b/requests/models.py
+@@ -379,22 +379,20 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
+ 
+             self.prepare_content_length(body)
+ 
+             # Add content-type if it wasn't explicitly provided.
+             if (content_type) and (not 'content-type' in self.headers):
+                 self.headers['Content-Type'] = content_type
+ 
+         self.body = body
+ 
+     def prepare_content_length(self, body):
+-        if self.headers.get('Content-Length'):
+-            return
+         if hasattr(body, 'seek') and hasattr(body, 'tell'):
+             body.seek(0, 2)
+             self.headers['Content-Length'] = str(body.tell())
+             body.seek(0, 0)
+         elif body is not None:
+             self.headers['Content-Length'] = str(len(body))
+         elif self.method not in ('GET', 'HEAD'):
+             self.headers['Content-Length'] = '0'
+ 
+     def prepare_auth(self, auth):

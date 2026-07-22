@@ -1,0 +1,9 @@
+{
+  "name": "get_encoding_from_headers_2011",
+  "repo": "psf/requests",
+  "base_commit": "9bfe04586da9b980314a60c153b030195166a820",
+  "patch_file": "patches/get_encoding_from_headers_2011.diff",
+  "code_file": "requests/utils.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function"
+}

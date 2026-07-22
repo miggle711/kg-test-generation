@@ -1,0 +1,9 @@
+{
+  "name": "vendoralias_2015",
+  "repo": "psf/requests",
+  "base_commit": "9d8a57f2a29de97682d85d71ea98354ac8223442",
+  "patch_file": "patches/vendoralias_2015.diff",
+  "code_file": "requests/packages/__init__.py",
+  "test_file": "test_requests.py",
+  "note": "multi-method (class + __init__ + load_module)"
+}

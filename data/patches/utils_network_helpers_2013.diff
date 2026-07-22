@@ -1,0 +1,156 @@
+diff --git a/requests/utils.py b/requests/utils.py
+index f92eed6f..d7852308 100644
+--- a/requests/utils.py
++++ b/requests/utils.py
+@@ -1,40 +1,41 @@
+ # -*- coding: utf-8 -*-
+ 
+ """
+ requests.utils
+ ~~~~~~~~~~~~~~
+ 
+ This module provides utility functions that are used within Requests
+ that are also useful for external consumption.
+ 
+ """
+ 
+ import cgi
+ import codecs
+ import collections
+ import io
+ import os
+ import platform
+ import re
+ import sys
+-import netaddr
++import socket
++import struct
+ 
+ from . import __version__
+ from . import certs
+ from .compat import parse_http_list as _parse_list_header
+ from .compat import (quote, urlparse, bytes, str, OrderedDict, urlunparse,
+                      is_py2, is_py3, builtin_str, getproxies, proxy_bypass)
+ from .cookies import RequestsCookieJar, cookiejar_from_dict
+ from .structures import CaseInsensitiveDict
+ from .exceptions import MissingSchema, InvalidURL
+ 
+ _hush_pyflakes = (RequestsCookieJar,)
+ 
+ NETRC_FILES = ('.netrc', '_netrc')
+ 
+ DEFAULT_CA_BUNDLE_PATH = certs.where()
+ 
+ 
+ def dict_to_sequence(d):
+     """Returns an internal sequence dictionary update."""
+ 
+@@ -389,70 +390,94 @@ def unquote_unreserved(uri):
+                 parts[i] = c + parts[i][2:]
+             else:
+                 parts[i] = '%' + parts[i]
+         else:
+             parts[i] = '%' + parts[i]
+     return ''.join(parts)
+ 
+ 
+ def requote_uri(uri):
+     """Re-quote the given URI.
+ 
+     This function passes the given URI through an unquote/quote cycle to
+     ensure that it is fully and consistently quoted.
+     """
+     # Unquote only the unreserved characters
+     # Then quote only illegal characters (do not quote reserved, unreserved,
+     # or '%')
+     return quote(unquote_unreserved(uri), safe="!#$%&'()*+,/:;=?@[]~")
+ 
+ 
++def address_in_network(ip,net):
++    '''This function allows you to check if on IP belogs to a Network'''
++    ipaddr = struct.unpack('=L', socket.inet_aton(ip))[0]
++    netaddr, bits = net.split('/')
++    netmask = struct.unpack('=L', socket.inet_aton(dotted_netmask(int(bits))))[0]
++    network = struct.unpack('=L', socket.inet_aton(netaddr))[0] & netmask
++    return (ipaddr & netmask) == (network & netmask)
++
++
++def dotted_netmask(mask):
++    bits = 0xffffffff ^ (1 << 32 - mask) - 1
++    return socket.inet_ntoa(struct.pack('>I', bits))
++
++
++def is_ipv4_address(string_ip):
++    try:
++        socket.inet_aton(string_ip)
++    except BaseException:
++        return False
++    return True
++
++
++def is_ipv4_network(string_network):
++    if '/' in string_network:
++        try:
++            socket.inet_aton(string_network.split('/')[0])
++        except OSError:
++            return False
++    else:
++        return False
++    return True
++
++
+ def get_environ_proxies(url):
+     """Return a dict of environment proxies."""
+ 
+     get_proxy = lambda k: os.environ.get(k) or os.environ.get(k.upper())
+ 
+     # First check whether no_proxy is defined. If it is, check that the URL
+     # we're getting isn't in the no_proxy list.
+     no_proxy = get_proxy('no_proxy')
+     netloc = urlparse(url).netloc
+ 
+     if no_proxy:
+         # We need to check whether we match here. We need to see if we match
+         # the end of the netloc, both with and without the port.
+         no_proxy = no_proxy.replace(' ', '').split(',')
+ 
+-        ip = None
+-        try:
+-            ip = netaddr.IPAddress(netloc.split(':')[0])
+-        except netaddr.AddrFormatError:
+-            pass
+-
+-        if ip:
++        ip = netloc.split(':')[0]
++        if is_ipv4_address(ip):
+             for proxy_ip in no_proxy:
+-                proxy_ipaddress = None
+-                try:
+-                    proxy_ipaddress = netaddr.IPNetwork(proxy_ip)
+-                except (netaddr.AddrFormatError, ValueError):
+-                    continue
+-                if proxy_ipaddress and ip in proxy_ipaddress:
+-                    return {}
++                if is_ipv4_network(proxy_ip):
++                    if address_in_network(ip, proxy_ip):
++                        return {}
+         else:
+             for host in no_proxy:
+                 if netloc.endswith(host) or netloc.split(':')[0].endswith(host):
+                     # The URL does match something in no_proxy, so we don't want
+                     # to apply the proxies on this URL.
+                     return {}
+ 
+     # If the system proxy settings indicate that this URL should be bypassed,
+     # don't proxy.
+     if proxy_bypass(netloc):
+         return {}
+ 
+     # If we get here, we either didn't have no_proxy set or we're not going
+     # anywhere that no_proxy applies to, and the system settings don't require
+     # bypassing the proxy for the current URL.
+     return getproxies()
+ 
+ 
+ def default_user_agent():
+     """Return a string representing the default user agent."""

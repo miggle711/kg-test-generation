@@ -1,0 +1,9 @@
+{
+  "name": "utils_network_helpers_2013",
+  "repo": "psf/requests",
+  "base_commit": "2c914126ba0c4865dc37c0a70f481091112a7dac",
+  "patch_file": "patches/utils_network_helpers_2013.diff",
+  "code_file": "requests/utils.py",
+  "test_file": "test_requests.py",
+  "note": "multi-function (5 free functions, messy)"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "prepare_content_length_2013",
+  "repo": "psf/requests",
+  "base_commit": "603fd42fe6b9c7d283d37f676d818491722cebe6",
+  "patch_file": "patches/prepare_content_length_2013.diff",
+  "code_file": "requests/models.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function"
+}

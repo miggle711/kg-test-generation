@@ -1,0 +1,9 @@
+{
+  "name": "status_codes_init_2018",
+  "repo": "psf/requests",
+  "base_commit": "991e8b76b7a9d21f698b24fa0058d3d5968721bc",
+  "patch_file": "patches/status_codes_init_2018.diff",
+  "code_file": "requests/status_codes.py",
+  "test_file": "tests/test_requests.py",
+  "note": "clean single-function, small helper (needs wide context to resolve)"
+}

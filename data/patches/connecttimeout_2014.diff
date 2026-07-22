@@ -1,0 +1,29 @@
+diff --git a/requests/exceptions.py b/requests/exceptions.py
+index d59637a3..6dbd98a9 100644
+--- a/requests/exceptions.py
++++ b/requests/exceptions.py
+@@ -44,22 +44,22 @@ class SSLError(ConnectionError):
+ 
+ 
+ class Timeout(RequestException):
+     """The request timed out.
+ 
+     Catching this error will catch both :exc:`ConnectTimeout` and
+     :exc:`ReadTimeout` errors.
+     """
+ 
+ 
+-class ConnectTimeout(Timeout):
+-    """ The request timed out while trying to connect to the server.
++class ConnectTimeout(ConnectionError, Timeout):
++    """The request timed out while trying to connect to the server.
+ 
+     Requests that produce this error are safe to retry
+     """
+ 
+ 
+ class ReadTimeout(Timeout):
+     """The server did not send any data in the allotted amount of time."""
+ 
+ 
+ class URLRequired(RequestException):

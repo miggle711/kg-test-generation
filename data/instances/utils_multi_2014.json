@@ -1,0 +1,9 @@
+{
+  "name": "utils_multi_2014",
+  "repo": "psf/requests",
+  "base_commit": "be805f942ea5286e4b6b5c899d96e8cb9e76e66c",
+  "patch_file": "patches/utils_multi_2014.diff",
+  "code_file": "requests/utils.py",
+  "test_file": "test_requests.py",
+  "note": "multi-function (2 free functions)"
+}

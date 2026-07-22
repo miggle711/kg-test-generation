@@ -1,0 +1,9 @@
+{
+  "name": "resolve_redirects_2013",
+  "repo": "psf/requests",
+  "base_commit": "798a1ffdec682fe8b9e0c3386f445ab6e1fd801c",
+  "patch_file": "patches/resolve_redirects_2013.diff",
+  "code_file": "requests/sessions.py",
+  "test_file": "test_requests.py",
+  "note": "ambiguous: class vs method (mirrors #14 case)"
+}

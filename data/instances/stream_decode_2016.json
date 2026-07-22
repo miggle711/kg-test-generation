@@ -1,0 +1,9 @@
+{
+  "name": "stream_decode_2016",
+  "repo": "psf/requests",
+  "base_commit": "36453b95b13079296776d11b09cab2567ea3e703",
+  "patch_file": "patches/stream_decode_2016.diff",
+  "code_file": "requests/utils.py",
+  "test_file": "tests/test_utils.py",
+  "note": "clean single-function"
+}

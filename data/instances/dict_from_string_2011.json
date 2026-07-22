@@ -1,0 +1,9 @@
+{
+  "name": "dict_from_string_2011",
+  "repo": "psf/requests",
+  "base_commit": "1da54de5dc1558eaaba0d6fe89eb641ead493cd6",
+  "patch_file": "patches/dict_from_string_2011.diff",
+  "code_file": "requests/packages/oreos/core.py",
+  "test_file": "test_requests.py",
+  "note": "clean single-function, vendored dep"
+}

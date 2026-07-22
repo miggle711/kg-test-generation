@@ -1,0 +1,9 @@
+{
+  "name": "request_2019",
+  "repo": "psf/requests",
+  "base_commit": "f9ac75cab1365f059d827b0e6aca84a16c49bbab",
+  "patch_file": "patches/request_2019.diff",
+  "code_file": "requests/api.py",
+  "test_file": "tests/test_requests.py",
+  "note": "clean single-function"
+}

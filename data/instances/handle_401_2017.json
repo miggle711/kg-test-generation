@@ -1,0 +1,9 @@
+{
+  "name": "handle_401_2017",
+  "repo": "psf/requests",
+  "base_commit": "23057dbc22d08ee831198f287d11d750f200e092",
+  "patch_file": "patches/handle_401_2017.diff",
+  "code_file": "requests/auth.py",
+  "test_file": "tests/test_requests.py",
+  "note": "clean single-function"
+}
