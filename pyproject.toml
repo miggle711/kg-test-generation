@@ -12,7 +12,8 @@ dependencies = [
 
 [project.optional-dependencies]
 groq = ["groq"]
-all = ["kg-test-generation[groq]"]
+tokens = ["tiktoken"]
+all = ["kg-test-generation[groq,tokens]"]
 
 [project.scripts]
 kg-testgen = "kg_test_generation.pipeline:main"
