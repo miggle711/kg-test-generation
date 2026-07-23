@@ -412,6 +412,35 @@ class TestSystemPrompt:
         assert "pytest" in prompt.lower()
         assert "Output ONLY the test code" in prompt
 
+    def test_includes_network_mocking_guidance(self):
+        """Issue #17: confirmed live via a recheck (see #27's latest
+        comment) -- generated tests still hit real endpoints like
+        http://example.com without this guidance.
+        """
+        prompt = system_prompt()
+
+        assert "Never make a real network call" in prompt
+        assert "example.com" in prompt or "httpbin.org" in prompt
+
+    def test_includes_context_manager_mocking_example(self):
+        """Issue #22: confirmed live via the same recheck -- every test
+        in request_2019's KG-augmented run failed because
+        mock_session.return_value.request was used instead of
+        mock_session.return_value.__enter__.return_value.request.
+        """
+        prompt = system_prompt()
+
+        assert "__enter__" in prompt
+        assert "mock_cls.return_value.__enter__.return_value" in prompt
+
+    def test_output_only_code_instruction_survives_the_new_section(self):
+        """The final instruction (critical for parse_output.extract_test_code
+        to find a clean code block) must still be the last thing in the
+        prompt, not buried before the new Mocking Guidance section.
+        """
+        prompt = system_prompt()
+        assert prompt.rstrip().endswith("Output ONLY the test code, no explanations.")
+
 
 class TestGroqTestGenerator:
     def test_raises_without_api_key(self, monkeypatch):
