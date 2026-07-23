@@ -20,6 +20,18 @@ from typing import Dict, Optional
 def system_prompt() -> str:
     """Shared system prompt for both arms -- the task and output contract
     are identical; only the context payload shape differs.
+
+    Consolidates the fixes for issues #17 and #22 into one mocking-
+    guidance section (see issue #29) rather than two separate one-off
+    instructions -- both are confirmed-live problems as of a recheck
+    against real generation (see #27's latest comment): #17 causes tests
+    to hit the live network (e.g. http://example.com, httpbin.org)
+    instead of mocking, and #22 causes every test in a file to fail when
+    the function under test uses a context manager (`with X() as x:`),
+    because `mock_cls.return_value` is NOT what such a block binds to
+    `x` -- that's `mock_cls.return_value.__enter__.return_value`, and the
+    old guideline #6 ("Mock external dependencies") was too abstract for
+    the model to apply correctly to either case.
     """
     return (
         "You are an expert Python test engineer. Your task is to generate comprehensive, "
@@ -30,9 +42,34 @@ def system_prompt() -> str:
         "3. Each test should have a clear docstring explaining its purpose.\n"
         "4. Use meaningful assertion messages.\n"
         "5. Follow the naming convention: test_<function>_<scenario>.\n"
-        "6. Mock external dependencies but test real business logic.\n"
+        "6. Mock external dependencies but test real business logic. See the Mocking Guidance "
+        "section below for the two most common ways to get this wrong.\n"
         "7. Ensure tests are independent and can run in any order.\n"
         "8. Include parametrized tests where appropriate.\n\n"
+        "# Mocking Guidance\n\n"
+        "## Never make a real network call\n"
+        "Do not let any generated test actually reach the network, even to a URL that looks "
+        "safe or well-known (e.g. http://example.com, https://httpbin.org). A real request "
+        "makes the test flaky (depends on live server behavior, which can change or be "
+        "unreachable) and untestable offline/in CI. Mock the HTTP layer instead, e.g.:\n\n"
+        "```python\n"
+        "with patch('requests.adapters.HTTPAdapter.send') as mock_send:\n"
+        "    mock_send.return_value = Mock(status_code=200)\n"
+        "    response = session.get('http://example.com')\n"
+        "```\n\n"
+        "## Mocking a context manager\n"
+        "If the function under test uses `with SomeClass(...) as x:`, patching `SomeClass` "
+        "alone is not enough -- `mock_cls.return_value` is what `SomeClass(...)` returns, "
+        "but `x` inside the `with` block is bound to `mock_cls.return_value.__enter__.return_value` "
+        "(what `__enter__()` returns), which is a DIFFERENT mock object by default. Wire up "
+        "the one the code actually uses:\n\n"
+        "```python\n"
+        "with patch('module.SomeClass') as mock_cls:\n"
+        "    mock_instance = mock_cls.return_value.__enter__.return_value\n"
+        "    mock_instance.some_method.return_value = 'expected result'\n"
+        "    # now `with SomeClass() as x: x.some_method()` inside the code under test\n"
+        "    # will see mock_instance.some_method's mocked return value/side_effect\n"
+        "```\n\n"
         "Output ONLY the test code, no explanations."
     )
 
@@ -220,6 +257,21 @@ def _build_kg_augmented_prompt(hierarchical_json: Dict) -> str:
         for rel in context["related"]:
             parts.append(f"- {rel.get('type', '')}: {_qualified_name(rel)}")
         parts.append("")
+
+    if context.get("sibling_methods"):
+        # Context a flat single-function extraction (the baseline arm)
+        # structurally cannot provide -- other methods on the seed's own
+        # class (e.g. __init__, or a setup method like prepare()) whose
+        # side effects the seed's own body depends on but doesn't itself
+        # establish (see issue #50: this caused generated tests to
+        # instantiate an object and call the seed method directly without
+        # ever calling the real setup method that initializes state the
+        # seed method reads unconditionally).
+        parts.append("## Other Methods on the Same Class:")
+        for sm in context["sibling_methods"]:
+            parts.append(f"- {_qualified_name(sm)}")
+        parts.append("")
+        parts.extend(_render_source_snippets("Method", context["sibling_methods"]))
 
     if context.get("existing_tests"):
         parts.append("## Existing Tests (for reference):")
