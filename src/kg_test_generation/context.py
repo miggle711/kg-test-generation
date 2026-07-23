@@ -117,10 +117,19 @@ def build_kg_augmented_context(instance: Dict, depth: int = 2) -> Dict:
                     canonically resolved target function (see module
                     docstring) -- surfaces the ambiguity instead of
                     silently generating tests for a different function
-                    than the baseline arm.
+                    than the baseline arm. Also raised (via
+                    extract_and_validate's strict=True) if
+                    TestContextValidator finds a blocking error, e.g. a
+                    seed with no context or a non-function/method/class
+                    seed -- previously this repo passed verbose=False and
+                    discarded the report entirely, so validator errors
+                    that would have caught real bugs (e.g.
+                    repo-kg-construction#54's test-file-as-seed defect)
+                    went completely unnoticed instead of raising or even
+                    being printed.
     """
     target_name = resolve_target_function(instance)
-    context, _report = extract_and_validate(instance, depth=depth, verbose=False)
+    context, _report = extract_and_validate(instance, depth=depth, verbose=False, strict=True)
 
     seed_names = {seed.get("label") for seed in context.seeds}
     if target_name not in seed_names:
@@ -195,3 +204,5 @@ def _find_function_source(source: str, function_name: str) -> Optional[tuple]:
         return None
 
     return _search(tree, None)
+
+
